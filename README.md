@@ -89,10 +89,13 @@ scrape_configs:
 
 ### Quick Install
 
-Install the latest version with a single command:
+Download and run the install script:
 
 ```bash
-curl -sL https://raw.githubusercontent.com/lwnmengjing/ats-exporter/main/install.sh | sudo bash
+curl -sSLo install.sh https://raw.githubusercontent.com/lwnmengjing/ats-exporter/main/install.sh
+chmod +x install.sh
+# Optional: review install.sh before running
+sudo ./install.sh install
 ```
 
 ### Install Options

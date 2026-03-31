@@ -84,13 +84,15 @@ func main() {
 
 	http.Handle(*metricsPath, promhttp.Handler())
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`<html>
+		if _, err := w.Write([]byte(`<html>
 <head><title>ATS Exporter</title></head>
 <body>
 <h1>Apache Traffic Server Exporter</h1>
 <p><a href='` + *metricsPath + `'>Metrics</a></p>
 </body>
-</html>`))
+</html>`)); err != nil {
+			logger.Debug("Failed to write response", "error", err)
+		}
 	})
 
 	server := &http.Server{

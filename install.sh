@@ -162,13 +162,10 @@ create_env_file() {
         log_step "Creating environment file ${env_file}..."
         cat > "$env_file" << EOF
 # ATS Exporter Configuration
-# Uncomment and modify as needed
+# Modify values as needed, then restart service: sudo systemctl restart ats-exporter
 
-# LISTEN_ADDRESS=${DEFAULT_LISTEN_ADDRESS}
-# METRICS_PATH=${DEFAULT_METRICS_PATH}
-# ATS_URL=${DEFAULT_ATS_URL}
-# ATS_TIMEOUT=${DEFAULT_ATS_TIMEOUT}
-# LOG_LEVEL=${DEFAULT_LOG_LEVEL}
+ATS_URL=${ATS_URL:-$DEFAULT_ATS_URL}
+LISTEN_ADDRESS=${LISTEN_ADDRESS:-$DEFAULT_LISTEN_ADDRESS}
 EOF
         chown "${SERVICE_USER}:${SERVICE_GROUP}" "$env_file"
     fi
@@ -179,30 +176,25 @@ create_systemd_service() {
     
     local service_file="/etc/systemd/system/${SERVICE_NAME}.service"
     
-    cat > "$service_file" << EOF
+    cat > "$service_file" << 'SYSTEMD_EOF'
 [Unit]
 Description=Apache Traffic Server Exporter
-Documentation=https://github.com/${REPO}
+Documentation=https://github.com/lwnmengjing/ats-exporter
 After=network.target
 
 [Service]
 Type=simple
-User=${SERVICE_USER}
-Group=${SERVICE_GROUP}
-EnvironmentFile=-${CONFIG_DIR}/${BINARY_NAME}.env
-ExecStart=${INSTALL_DIR}/${BINARY_NAME} \\
-    --web.listen-address=\${LISTEN_ADDRESS:-${DEFAULT_LISTEN_ADDRESS}} \\
-    --web.telemetry-path=\${METRICS_PATH:-${DEFAULT_METRICS_PATH}} \\
-    --ats.url=\${ATS_URL:-${DEFAULT_ATS_URL}} \\
-    --ats.timeout=\${ATS_TIMEOUT:-${DEFAULT_ATS_TIMEOUT}} \\
-    --log.level=\${LOG_LEVEL:-${DEFAULT_LOG_LEVEL}}
+User=ats-exporter
+Group=ats-exporter
+EnvironmentFile=-/etc/ats-exporter/ats-exporter.env
+ExecStart=/usr/local/bin/ats-exporter
 Restart=on-failure
 RestartSec=5s
 LimitNOFILE=65536
 
 [Install]
 WantedBy=multi-user.target
-EOF
+SYSTEMD_EOF
 
     systemctl daemon-reload
     log_info "Systemd service created at ${service_file}"
