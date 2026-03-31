@@ -39,7 +39,8 @@ func (c *ATSClient) FetchMetrics() (*json.Decoder, error) {
 	case MethodHTTP:
 		return c.fetchMetricsViaHTTP()
 	default:
-		return c.fetchMetricsViaHTTP()
+		logger.Error("Unsupported ATS fetch method", "method", c.method)
+		return nil, fmt.Errorf("unsupported ATS fetch method: %q", c.method)
 	}
 }
 
