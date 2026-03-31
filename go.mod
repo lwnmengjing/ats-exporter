@@ -1,6 +1,6 @@
 module github.com/lwnmengjing/ats-exporter
 
-go 1.25
+go 1.23
 
 require github.com/prometheus/client_golang v1.21.1
 
