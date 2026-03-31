@@ -214,12 +214,83 @@ sudo systemctl start ats-exporter
 
 ## ATS Configuration
 
-Make sure your Apache Traffic Server has the stats endpoint enabled by adding the following to `records.config`:
+Apache Traffic Server needs to be configured to expose the stats endpoint (`/_stats`) for the exporter to scrape metrics.
+
+### Enable Stats Endpoint
+
+Add the following to your `records.config` (typically located at `/etc/trafficserver/records.config` or `/usr/local/etc/trafficserver/records.config`):
 
 ```
-CONFIG proxy.config.http.record_slow_requests INT 1
+# Enable HTTP statistics
 CONFIG proxy.config.http.enable_http_stats INT 1
+CONFIG proxy.config.http.record_slow_requests INT 1
+
+# Enable stats endpoint (JSON format)
+CONFIG proxy.config.http_ui_enabled INT 1
 ```
+
+### Stats Endpoint URL
+
+By default, ATS exposes stats at:
+- **URL**: `http://localhost:80/_stats`
+- **Port**: ATS proxy port (default 80 or 8080)
+
+You can verify the endpoint is working:
+
+```bash
+curl http://localhost:80/_stats
+```
+
+Should return JSON with metrics like:
+```json
+{
+  "global": {
+    "proxy.process.http.total_incoming_connections": 123,
+    "proxy.process.http.current_client_connections": 5,
+    ...
+  }
+}
+```
+
+### Common ATS Stats Configuration
+
+For comprehensive metrics collection, consider enabling:
+
+```
+# HTTP statistics
+CONFIG proxy.config.http.enable_http_stats INT 1
+CONFIG proxy.config.http.record_slow_requests INT 1
+CONFIG proxy.config.http.record_cop_transactions INT 1
+
+# Cache statistics
+CONFIG proxy.config.cache.enable_read_while_writer INT 1
+
+# DNS/HostDB statistics (enabled by default)
+CONFIG proxy.config.hostdb.enabled INT 1
+
+# Network statistics
+CONFIG proxy.config.net.enable_stats INT 1
+```
+
+### Custom Stats Port
+
+If ATS is running on a different port, update the exporter configuration:
+
+```bash
+# In /etc/ats-exporter/ats-exporter.env
+ATS_URL=http://localhost:8080/_stats
+```
+
+Or pass via command line:
+```bash
+./ats-exporter --ats.url=http://your-ats-server:8080/_stats
+```
+
+### ATS Documentation
+
+For more details on ATS configuration, see:
+- [ATS Administration Guide](https://docs.trafficserver.apache.org/en/latest/admin-guide/index.en.html)
+- [TS Records Config](https://docs.trafficserver.apache.org/en/latest/admin-guide/files/records.config.en.html)
 
 ## License
 
