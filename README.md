@@ -242,6 +242,7 @@ Group=ats-exporter
 ExecStart=/usr/local/bin/ats-exporter \
     --web.listen-address=:9090 \
     --web.telemetry-path=/metrics \
+    --ats.method=http \
     --ats.url=http://localhost:80/_stats
 Restart=on-failure
 
