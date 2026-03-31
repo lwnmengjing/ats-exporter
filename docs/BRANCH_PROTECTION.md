@@ -24,6 +24,7 @@ The `main` branch is the production branch and is **protected** with the followi
 - **Enforce for administrators**: **Yes**
 - **Allow force pushes**: **No**
 - **Allow deletions**: **No**
+- **Require conversation resolution before merging**: **Yes**
 
 ## Dev Branch (`dev`)
 
@@ -46,6 +47,7 @@ The `dev` branch is the development branch and has similar protections but with 
 - **Enforce for administrators**: **No** (allows maintainers to push directly for quick fixes)
 - **Allow force pushes**: **No**
 - **Allow deletions**: **No**
+- **Require conversation resolution before merging**: **Yes**
 
 ## Workflow
 
