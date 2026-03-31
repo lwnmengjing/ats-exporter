@@ -25,13 +25,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Log statistics (bytes written, events)
 - Cluster statistics (nodes, connections)
 - Configurable via command-line flags
-- Docker support
+- Docker support with GHCR publishing
 - Graceful shutdown handling
 - Version information support
 
 ### Features
 - Modern Go 1.24+ implementation
-- Comprehensive ATS metrics collection
+- Comprehensive ATS metrics collection (300+ metrics)
+- Two methods to fetch metrics:
+  - `traffic_ctl` method (default, recommended)
+  - HTTP stats endpoint method
 - Configurable listen address and metrics path
 - Customizable ATS URL and timeout
 - Multiple log levels (debug, info, warn, error)
+- One-click installation script with systemd service support
