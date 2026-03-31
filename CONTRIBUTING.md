@@ -71,6 +71,45 @@ golangci-lint run
 
 ## Making Changes
 
+### Branch Strategy
+
+**IMPORTANT: Direct commits to the `main` branch are NOT allowed.**
+
+1. **Always start from the main branch**
+   ```bash
+   git checkout main
+   git pull --rebase
+   ```
+
+2. **Create a new feature branch**
+   ```bash
+   git checkout -b feature/your-feature-name
+   ```
+   
+   Branch naming conventions:
+   - `feature/xxx` - New features
+   - `fix/xxx` - Bug fixes
+   - `docs/xxx` - Documentation changes
+   - `refactor/xxx` - Code refactoring
+
+3. **Make your changes and commit**
+
+4. **Push your branch and create a Pull Request**
+   ```bash
+   git push -u origin feature/your-feature-name
+   ```
+
+5. **Wait for CI checks and code review**
+
+6. **Pull latest changes before merge**
+   ```bash
+   git pull --rebase
+   ```
+   
+   This is required because:
+   - GitHub Copilot may automatically commit fixes to the PR
+   - Other contributors may push changes
+
 ### Code Style
 
 - Follow standard Go conventions and idioms
