@@ -14,11 +14,13 @@ RUN go mod download
 
 COPY . .
 
-RUN CGO_ENABLED=0 go build -ldflags="-s -w \
+RUN GO_VERSION=$(go version | awk '{print $3}') && \
+    CGO_ENABLED=0 go build -ldflags="-s -w \
     -X main.Version=${VERSION} \
     -X main.Revision=${REVISION} \
     -X main.Branch=${BRANCH} \
-    -X main.BuildDate=${BUILD_DATE}" \
+    -X main.BuildDate=${BUILD_DATE} \
+    -X main.GoVersion=${GO_VERSION}" \
     -o ats-exporter .
 
 FROM alpine:3.21

@@ -166,6 +166,9 @@ create_env_file() {
 
 ATS_URL=${ATS_URL:-$DEFAULT_ATS_URL}
 LISTEN_ADDRESS=${LISTEN_ADDRESS:-$DEFAULT_LISTEN_ADDRESS}
+METRICS_PATH=${METRICS_PATH:-$DEFAULT_METRICS_PATH}
+ATS_TIMEOUT=${ATS_TIMEOUT:-$DEFAULT_ATS_TIMEOUT}
+LOG_LEVEL=${LOG_LEVEL:-$DEFAULT_LOG_LEVEL}
 EOF
         chown "${SERVICE_USER}:${SERVICE_GROUP}" "$env_file"
     fi
@@ -187,7 +190,12 @@ Type=simple
 User=ats-exporter
 Group=ats-exporter
 EnvironmentFile=-/etc/ats-exporter/ats-exporter.env
-ExecStart=/usr/local/bin/ats-exporter
+ExecStart=/usr/local/bin/ats-exporter \
+    --web.listen-address=${LISTEN_ADDRESS} \
+    --web.telemetry-path=${METRICS_PATH} \
+    --ats.url=${ATS_URL} \
+    --ats.timeout=${ATS_TIMEOUT} \
+    --log.level=${LOG_LEVEL}
 Restart=on-failure
 RestartSec=5s
 LimitNOFILE=65536
@@ -294,11 +302,16 @@ do_install() {
     
     if check_installed; then
         log_warn "${BINARY_NAME} is already installed (version: $(get_installed_version))"
-        read -p "Do you want to upgrade? [y/N] " -n 1 -r
-        echo
-        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-            log_info "Installation cancelled"
-            exit 0
+        if [ -t 0 ]; then
+            read -p "Do you want to upgrade? [y/N] " -n 1 -r
+            echo
+            if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+                log_info "Installation cancelled"
+                exit 0
+            fi
+        else
+            log_error "Non-interactive shell detected and ${BINARY_NAME} is already installed. Aborting upgrade to avoid unintended changes. Re-run this script from an interactive shell to confirm the upgrade."
+            exit 1
         fi
         stop_service
     fi
