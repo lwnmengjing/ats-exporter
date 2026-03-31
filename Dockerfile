@@ -1,15 +1,25 @@
-FROM golang:1.25-alpine AS builder
+FROM golang:1.24-alpine AS builder
+
+ARG VERSION=unknown
+ARG REVISION=unknown
+ARG BRANCH=unknown
+ARG BUILD_DATE=unknown
 
 WORKDIR /app
 
-RUN apk add --no-cache git make
+RUN apk add --no-cache git
 
 COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
 
-RUN make build
+RUN CGO_ENABLED=0 go build -ldflags="-s -w \
+    -X main.Version=${VERSION} \
+    -X main.Revision=${REVISION} \
+    -X main.Branch=${BRANCH} \
+    -X main.BuildDate=${BUILD_DATE}" \
+    -o ats-exporter .
 
 FROM alpine:3.21
 
