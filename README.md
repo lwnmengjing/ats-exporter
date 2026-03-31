@@ -79,6 +79,130 @@ scrape_configs:
       - targets: ['localhost:9090']
 ```
 
+## Deployment
+
+### Quick Install
+
+Install the latest version with a single command:
+
+```bash
+curl -sL https://raw.githubusercontent.com/lwnmengjing/ats-exporter/main/install.sh | sudo bash
+```
+
+### Install Options
+
+```bash
+# Install specific version
+sudo ./install.sh install --version v1.0.0
+
+# Install with custom ATS URL and listen port
+sudo ./install.sh install --ats-url http://localhost:8080/_stats --listen-address :9150
+
+# Install with debug logging
+sudo ./install.sh install --log-level debug
+```
+
+### Configuration
+
+After installation, you can configure the exporter by editing the environment file:
+
+```bash
+sudo vi /etc/ats-exporter/ats-exporter.env
+```
+
+Configuration options:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `LISTEN_ADDRESS` | `:9090` | Address to listen on |
+| `METRICS_PATH` | `/metrics` | Path for metrics endpoint |
+| `ATS_URL` | `http://localhost:80/_stats` | ATS stats endpoint URL |
+| `ATS_TIMEOUT` | `10s` | Timeout for ATS scraping |
+| `LOG_LEVEL` | `info` | Log level (debug, info, warn, error) |
+
+After modifying the configuration, restart the service:
+
+```bash
+sudo systemctl restart ats-exporter
+```
+
+### Service Management
+
+```bash
+# Check service status
+sudo systemctl status ats-exporter
+
+# Start/Stop/Restart service
+sudo systemctl start ats-exporter
+sudo systemctl stop ats-exporter
+sudo systemctl restart ats-exporter
+
+# View logs
+sudo journalctl -u ats-exporter -f
+
+# Enable/Disable service on boot
+sudo systemctl enable ats-exporter
+sudo systemctl disable ats-exporter
+```
+
+### Upgrade
+
+```bash
+# Upgrade to latest version
+sudo ./install.sh upgrade
+
+# Upgrade to specific version
+sudo ./install.sh upgrade --version v1.1.0
+```
+
+### Uninstall
+
+```bash
+sudo ./install.sh uninstall
+```
+
+### Manual Installation
+
+If you prefer manual installation:
+
+```bash
+# Download the binary
+VERSION=v1.0.0
+curl -sL https://github.com/lwnmengjing/ats-exporter/releases/download/${VERSION}/ats-exporter-${VERSION}-linux-amd64.tar.gz | tar xz
+
+# Move to bin directory
+sudo mv ats-exporter /usr/local/bin/
+sudo chmod +x /usr/local/bin/ats-exporter
+
+# Create user
+sudo useradd --system --no-create-home --shell /bin/false ats-exporter
+
+# Create systemd service
+sudo cat > /etc/systemd/system/ats-exporter.service << 'EOF'
+[Unit]
+Description=Apache Traffic Server Exporter
+After=network.target
+
+[Service]
+Type=simple
+User=ats-exporter
+Group=ats-exporter
+ExecStart=/usr/local/bin/ats-exporter \
+    --web.listen-address=:9090 \
+    --web.telemetry-path=/metrics \
+    --ats.url=http://localhost:80/_stats
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Enable and start
+sudo systemctl daemon-reload
+sudo systemctl enable ats-exporter
+sudo systemctl start ats-exporter
+```
+
 ## ATS Configuration
 
 Make sure your Apache Traffic Server has the stats endpoint enabled by adding the following to `records.config`:
