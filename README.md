@@ -169,6 +169,8 @@ Configuration options:
 | `ATS_URL` | `http://localhost:80/_stats` | ATS stats endpoint URL |
 | `ATS_TIMEOUT` | `10s` | Timeout for ATS scraping |
 | `LOG_LEVEL` | `info` | Log level (debug, info, warn, error) |
+| `ATS_METHOD` | `http` | How to collect ATS stats (`http` or `traffic_ctl`) |
+| `TRAFFIC_CTL_PATH` | `/usr/bin/traffic_ctl` | Path to the `traffic_ctl` binary (used when `ATS_METHOD=traffic_ctl`) |
 
 After modifying the configuration, restart the service:
 
