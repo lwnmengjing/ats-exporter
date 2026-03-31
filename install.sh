@@ -350,7 +350,16 @@ do_upgrade() {
     
     stop_service
     download_binary "$version" "$os" "$arch"
+    
+    # Ensure runtime environment and service unit are present/up to date
+    create_user
+    create_config_dir
+    create_env_file
+    create_systemd_service
+    enable_service
+    
     start_service
+    show_status
     
     log_info "Upgrade complete!"
 }
