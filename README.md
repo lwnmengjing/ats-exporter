@@ -59,10 +59,45 @@ make build VERSION=1.0.0 REVISION=$(git rev-parse --short HEAD) BRANCH=$(git bra
 |------|---------|-------------|
 | `--web.listen-address` | `:9090` | Address to listen on |
 | `--web.telemetry-path` | `/metrics` | Path for metrics endpoint |
-| `--ats.url` | `http://localhost:80/_stats` | ATS stats endpoint URL |
+| `--ats.method` | `traffic_ctl` | Method to fetch ATS metrics: `http` or `traffic_ctl` |
+| `--ats.url` | `http://localhost:80/_stats` | ATS stats endpoint URL (used when `method=http`) |
+| `--ats.traffic_ctl.path` | `traffic_ctl` | Path to traffic_ctl binary (used when `method=traffic_ctl`) |
 | `--ats.timeout` | `10s` | Timeout for ATS scraping |
 | `--log.level` | `info` | Log level (debug, info, warn, error) |
 | `--version` | `false` | Show version information |
+
+## Methods to Fetch Metrics
+
+The exporter supports two methods to fetch ATS metrics:
+
+### traffic_ctl Method (Recommended)
+
+Uses the `traffic_ctl metric match` command to fetch metrics. This is more secure as it doesn't require exposing the HTTP stats endpoint.
+
+```bash
+# Run with traffic_ctl method (default)
+./ats-exporter --ats.method=traffic_ctl
+
+# Specify custom traffic_ctl path
+./ats-exporter --ats.method=traffic_ctl --ats.traffic_ctl.path=/usr/bin/traffic_ctl
+```
+
+**Requirements:**
+- `traffic_ctl` must be installed and accessible
+- The exporter must run on the same host as ATS (or have access to traffic_ctl)
+
+### HTTP Method
+
+Uses the ATS HTTP stats endpoint (`/_stats`) to fetch metrics.
+
+```bash
+# Run with HTTP method
+./ats-exporter --ats.method=http --ats.url=http://localhost:80/_stats
+```
+
+**Requirements:**
+- ATS stats endpoint must be enabled in `records.config`
+- Suitable for remote monitoring
 
 ## Docker
 
@@ -70,8 +105,14 @@ make build VERSION=1.0.0 REVISION=$(git rev-parse --short HEAD) BRANCH=$(git bra
 # Build Docker image
 docker build -t ats-exporter:latest .
 
-# Run container
-docker run -p 9090:9090 ats-exporter:latest --ats.url=http://ats-server:80/_stats
+# Run container with traffic_ctl method (needs access to host's traffic_ctl)
+docker run -p 9090:9090 \
+    -v /usr/bin/traffic_ctl:/usr/bin/traffic_ctl:ro \
+    ats-exporter:latest --ats.method=traffic_ctl
+
+# Run container with HTTP method (for remote monitoring)
+docker run -p 9090:9090 ats-exporter:latest \
+    --ats.method=http --ats.url=http://ats-server:80/_stats
 ```
 
 ## Prometheus Configuration
@@ -214,11 +255,33 @@ sudo systemctl start ats-exporter
 
 ## ATS Configuration
 
-Apache Traffic Server needs to be configured to expose the stats endpoint (`/_stats`) for the exporter to scrape metrics.
+The exporter supports two methods to collect metrics from Apache Traffic Server.
 
-### Enable Stats Endpoint
+### Method 1: traffic_ctl (Recommended)
 
-Add the following to your `records.config` (typically located at `/etc/trafficserver/records.config` or `/usr/local/etc/trafficserver/records.config`):
+This method uses the `traffic_ctl metric match` command and doesn't require any additional ATS configuration. It's more secure as it doesn't expose a HTTP endpoint.
+
+**Prerequisites:**
+- `traffic_ctl` must be installed (comes with ATS installation)
+- The exporter must run on the same host as ATS or have access to the traffic_ctl binary
+
+**No additional ATS configuration required.** Simply run:
+
+```bash
+# Default method (traffic_ctl)
+./ats-exporter
+
+# Or explicitly
+./ats-exporter --ats.method=traffic_ctl
+```
+
+### Method 2: HTTP Stats Endpoint
+
+If you prefer to use the HTTP endpoint or need remote monitoring, configure ATS to expose the stats endpoint.
+
+#### Enable Stats Endpoint
+
+Add the following to your `records.config` (typically located at `/etc/trafficserver/records.config`):
 
 ```
 # Enable HTTP statistics
@@ -229,7 +292,7 @@ CONFIG proxy.config.http.record_slow_requests INT 1
 CONFIG proxy.config.http_ui_enabled INT 1
 ```
 
-### Stats Endpoint URL
+#### Stats Endpoint URL
 
 By default, ATS exposes stats at:
 - **URL**: `http://localhost:80/_stats`

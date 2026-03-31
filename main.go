@@ -40,12 +40,14 @@ func initLogger(logLevel string) {
 
 func main() {
 	var (
-		listenAddress = flag.String("web.listen-address", ":9090", "Address to listen on for web interface and telemetry.")
-		metricsPath   = flag.String("web.telemetry-path", "/metrics", "Path under which to expose metrics.")
-		atsURL        = flag.String("ats.url", "http://localhost:80/_stats", "URL to Apache Traffic Server stats endpoint.")
-		atsTimeout    = flag.Duration("ats.timeout", 10*time.Second, "Timeout for scraping ATS.")
-		logLevel      = flag.String("log.level", "info", "Log level (debug, info, warn, error).")
-		showVersion   = flag.Bool("version", false, "Print version information and exit.")
+		listenAddress  = flag.String("web.listen-address", ":9090", "Address to listen on for web interface and telemetry.")
+		metricsPath    = flag.String("web.telemetry-path", "/metrics", "Path under which to expose metrics.")
+		atsURL         = flag.String("ats.url", "http://localhost:80/_stats", "URL to Apache Traffic Server stats endpoint (used when method=http).")
+		atsTimeout     = flag.Duration("ats.timeout", 10*time.Second, "Timeout for scraping ATS.")
+		atsMethod      = flag.String("ats.method", "traffic_ctl", "Method to fetch ATS metrics: 'http' or 'traffic_ctl'.")
+		trafficCtlPath = flag.String("ats.traffic_ctl.path", "traffic_ctl", "Path to traffic_ctl binary (used when method=traffic_ctl).")
+		logLevel       = flag.String("log.level", "info", "Log level (debug, info, warn, error).")
+		showVersion    = flag.Bool("version", false, "Print version information and exit.")
 	)
 	flag.Parse()
 
@@ -58,7 +60,9 @@ func main() {
 	}
 
 	logger.Info("Starting ATS exporter",
+		"ats_method", *atsMethod,
 		"ats_url", *atsURL,
+		"traffic_ctl_path", *trafficCtlPath,
 		"listen", *listenAddress,
 		"metrics_path", *metricsPath,
 		"version", Version,
@@ -68,9 +72,11 @@ func main() {
 	)
 
 	config := &Config{
-		ATSURL:   *atsURL,
-		Timeout:  *atsTimeout,
-		LogLevel: *logLevel,
+		ATSURL:         *atsURL,
+		Timeout:        *atsTimeout,
+		LogLevel:       *logLevel,
+		Method:         *atsMethod,
+		TrafficCtlPath: *trafficCtlPath,
 	}
 
 	client, err := NewATSClient(config)

@@ -15,6 +15,8 @@ DEFAULT_METRICS_PATH="/metrics"
 DEFAULT_ATS_URL="http://localhost:80/_stats"
 DEFAULT_ATS_TIMEOUT="10s"
 DEFAULT_LOG_LEVEL="info"
+DEFAULT_ATS_METHOD="traffic_ctl"
+DEFAULT_TRAFFIC_CTL_PATH="traffic_ctl"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -164,6 +166,8 @@ create_env_file() {
 # ATS Exporter Configuration
 # Modify values as needed, then restart service: sudo systemctl restart ats-exporter
 
+ATS_METHOD=${ATS_METHOD:-$DEFAULT_ATS_METHOD}
+TRAFFIC_CTL_PATH=${TRAFFIC_CTL_PATH:-$DEFAULT_TRAFFIC_CTL_PATH}
 ATS_URL=${ATS_URL:-$DEFAULT_ATS_URL}
 LISTEN_ADDRESS=${LISTEN_ADDRESS:-$DEFAULT_LISTEN_ADDRESS}
 METRICS_PATH=${METRICS_PATH:-$DEFAULT_METRICS_PATH}
@@ -193,7 +197,9 @@ EnvironmentFile=-/etc/ats-exporter/ats-exporter.env
 ExecStart=/usr/local/bin/ats-exporter \
     --web.listen-address=${LISTEN_ADDRESS} \
     --web.telemetry-path=${METRICS_PATH} \
+    --ats.method=${ATS_METHOD} \
     --ats.url=${ATS_URL} \
+    --ats.traffic_ctl.path=${TRAFFIC_CTL_PATH} \
     --ats.timeout=${ATS_TIMEOUT} \
     --log.level=${LOG_LEVEL}
 Restart=on-failure
@@ -415,23 +421,29 @@ usage() {
     echo "Options for install/upgrade:"
     echo "  --listen-address ADDR    Listen address (default: ${DEFAULT_LISTEN_ADDRESS})"
     echo "  --metrics-path PATH      Metrics path (default: ${DEFAULT_METRICS_PATH})"
-    echo "  --ats-url URL            ATS stats URL (default: ${DEFAULT_ATS_URL})"
+    echo "  --ats-method METHOD      Method to fetch metrics: http or traffic_ctl (default: ${DEFAULT_ATS_METHOD})"
+    echo "  --ats-url URL            ATS stats URL, used when method=http (default: ${DEFAULT_ATS_URL})"
+    echo "  --traffic-ctl-path PATH  Path to traffic_ctl binary (default: ${DEFAULT_TRAFFIC_CTL_PATH})"
     echo "  --ats-timeout TIMEOUT    ATS timeout (default: ${DEFAULT_ATS_TIMEOUT})"
     echo "  --log-level LEVEL        Log level (default: ${DEFAULT_LOG_LEVEL})"
     echo "  --version VERSION        Version to install (default: latest)"
     echo ""
     echo "Environment variables:"
-    echo "  LISTEN_ADDRESS, METRICS_PATH, ATS_URL, ATS_TIMEOUT, LOG_LEVEL"
+    echo "  LISTEN_ADDRESS, METRICS_PATH, ATS_METHOD, ATS_URL, TRAFFIC_CTL_PATH, ATS_TIMEOUT, LOG_LEVEL"
     echo ""
     echo "Examples:"
     echo "  # Install latest version"
-    echo "  curl -sL https://raw.githubusercontent.com/${REPO}/main/install.sh | sudo bash"
+    echo "  curl -sSLo install.sh https://raw.githubusercontent.com/${REPO}/main/install.sh"
+    echo "  chmod +x install.sh && sudo ./install.sh install"
     echo ""
     echo "  # Install specific version"
     echo "  sudo ./install.sh install --version v1.0.0"
     echo ""
-    echo "  # Install with custom options"
-    echo "  sudo ./install.sh install --ats-url http://localhost:8080/_stats --listen-address :9150"
+    echo "  # Install with HTTP method"
+    echo "  sudo ./install.sh install --ats-method http --ats-url http://localhost:80/_stats"
+    echo ""
+    echo "  # Install with traffic_ctl method (default)"
+    echo "  sudo ./install.sh install --ats-method traffic_ctl"
     echo ""
     echo "  # Upgrade to latest"
     echo "  sudo ./install.sh upgrade"
@@ -455,8 +467,16 @@ parse_args() {
                 METRICS_PATH="$2"
                 shift 2
                 ;;
+            --ats-method)
+                ATS_METHOD="$2"
+                shift 2
+                ;;
             --ats-url)
                 ATS_URL="$2"
+                shift 2
+                ;;
+            --traffic-ctl-path)
+                TRAFFIC_CTL_PATH="$2"
                 shift 2
                 ;;
             --ats-timeout)
