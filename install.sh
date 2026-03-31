@@ -8,16 +8,20 @@ INSTALL_DIR="/usr/local/bin"
 CONFIG_DIR="/etc/ats-exporter"
 SERVICE_USER="ats-exporter"
 SERVICE_GROUP="ats-exporter"
+REPO="lwnmengjing/ats-exporter"
 
 DEFAULT_LISTEN_ADDRESS=":9090"
 DEFAULT_METRICS_PATH="/metrics"
 DEFAULT_ATS_URL="http://localhost:80/_stats"
 DEFAULT_ATS_TIMEOUT="10s"
 DEFAULT_LOG_LEVEL="info"
+DEFAULT_ATS_METHOD="traffic_ctl"
+DEFAULT_TRAFFIC_CTL_PATH="traffic_ctl"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
 NC='\033[0m'
 
 log_info() {
@@ -32,9 +36,13 @@ log_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
+log_step() {
+    echo -e "${BLUE}[STEP]${NC} $1"
+}
+
 check_root() {
     if [ "$EUID" -ne 0 ]; then
-        log_error "Please run as root"
+        log_error "Please run as root (use sudo)"
         exit 1
     fi
 }
@@ -75,8 +83,7 @@ detect_os() {
 }
 
 get_latest_version() {
-    local repo="lwnmengjing/ats-exporter"
-    local version=$(curl -s "https://api.github.com/repos/${repo}/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+    local version=$(curl -sfL "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
     if [ -z "$version" ]; then
         log_error "Failed to get latest version"
         exit 1
@@ -84,25 +91,48 @@ get_latest_version() {
     echo "$version"
 }
 
+check_installed() {
+    if [ -f "${INSTALL_DIR}/${BINARY_NAME}" ]; then
+        return 0
+    fi
+    return 1
+}
+
+get_installed_version() {
+    if check_installed; then
+        ${INSTALL_DIR}/${BINARY_NAME} --version 2>/dev/null | grep "Version:" | awk '{print $2}' || echo "unknown"
+    else
+        echo "not installed"
+    fi
+}
+
 download_binary() {
     local version="$1"
     local os="$2"
     local arch="$3"
-    local repo="lwnmengjing/ats-exporter"
-    local url="https://github.com/${repo}/releases/download/${version}/ats-exporter-${version}-${os}-${arch}.tar.gz"
+    local url="https://github.com/${REPO}/releases/download/${version}/ats-exporter-${version}-${os}-${arch}.tar.gz"
     
-    log_info "Downloading ${BINARY_NAME} ${version} for ${os}-${arch}..."
+    log_step "Downloading ${BINARY_NAME} ${version} for ${os}-${arch}..."
     
     local tmp_dir=$(mktemp -d)
     local tmp_file="${tmp_dir}/${BINARY_NAME}.tar.gz"
     
-    if ! curl -sL -o "$tmp_file" "$url"; then
+    if ! curl -sfL -o "$tmp_file" "$url"; then
         log_error "Failed to download binary from $url"
         rm -rf "$tmp_dir"
         exit 1
     fi
     
-    tar -xzf "$tmp_file" -C "$tmp_dir"
+    if ! tar -xzf "$tmp_file" -C "$tmp_dir"; then
+        log_error "Failed to extract archive"
+        rm -rf "$tmp_dir"
+        exit 1
+    fi
+    
+    if [ -f "${INSTALL_DIR}/${BINARY_NAME}" ]; then
+        log_info "Removing old binary..."
+        rm -f "${INSTALL_DIR}/${BINARY_NAME}"
+    fi
     
     mv "${tmp_dir}/${BINARY_NAME}" "${INSTALL_DIR}/${BINARY_NAME}"
     chmod +x "${INSTALL_DIR}/${BINARY_NAME}"
@@ -114,25 +144,46 @@ download_binary() {
 
 create_user() {
     if ! id -u "${SERVICE_USER}" >/dev/null 2>&1; then
-        log_info "Creating user ${SERVICE_USER}..."
+        log_step "Creating user ${SERVICE_USER}..."
         useradd --system --no-create-home --shell /bin/false "${SERVICE_USER}"
     fi
 }
 
 create_config_dir() {
     if [ ! -d "${CONFIG_DIR}" ]; then
-        log_info "Creating config directory ${CONFIG_DIR}..."
+        log_step "Creating config directory ${CONFIG_DIR}..."
         mkdir -p "${CONFIG_DIR}"
     fi
     chown -R "${SERVICE_USER}:${SERVICE_GROUP}" "${CONFIG_DIR}"
 }
 
+create_env_file() {
+    local env_file="${CONFIG_DIR}/${BINARY_NAME}.env"
+    
+    if [ ! -f "$env_file" ]; then
+        log_step "Creating environment file ${env_file}..."
+        cat > "$env_file" << EOF
+# ATS Exporter Configuration
+# Modify values as needed, then restart service: sudo systemctl restart ats-exporter
+
+ATS_METHOD=${ATS_METHOD:-$DEFAULT_ATS_METHOD}
+TRAFFIC_CTL_PATH=${TRAFFIC_CTL_PATH:-$DEFAULT_TRAFFIC_CTL_PATH}
+ATS_URL=${ATS_URL:-$DEFAULT_ATS_URL}
+LISTEN_ADDRESS=${LISTEN_ADDRESS:-$DEFAULT_LISTEN_ADDRESS}
+METRICS_PATH=${METRICS_PATH:-$DEFAULT_METRICS_PATH}
+ATS_TIMEOUT=${ATS_TIMEOUT:-$DEFAULT_ATS_TIMEOUT}
+LOG_LEVEL=${LOG_LEVEL:-$DEFAULT_LOG_LEVEL}
+EOF
+        chown "${SERVICE_USER}:${SERVICE_GROUP}" "$env_file"
+    fi
+}
+
 create_systemd_service() {
-    log_info "Creating systemd service..."
+    log_step "Creating systemd service..."
     
     local service_file="/etc/systemd/system/${SERVICE_NAME}.service"
     
-    cat > "$service_file" << EOF
+    cat > "$service_file" << 'SYSTEMD_EOF'
 [Unit]
 Description=Apache Traffic Server Exporter
 Documentation=https://github.com/lwnmengjing/ats-exporter
@@ -140,32 +191,36 @@ After=network.target
 
 [Service]
 Type=simple
-User=${SERVICE_USER}
-Group=${SERVICE_GROUP}
-ExecStart=${INSTALL_DIR}/${BINARY_NAME} \
-    --web.listen-address=${LISTEN_ADDRESS:-$DEFAULT_LISTEN_ADDRESS} \
-    --web.telemetry-path=${METRICS_PATH:-$DEFAULT_METRICS_PATH} \
-    --ats.url=${ATS_URL:-$DEFAULT_ATS_URL} \
-    --ats.timeout=${ATS_TIMEOUT:-$DEFAULT_ATS_TIMEOUT} \
-    --log.level=${LOG_LEVEL:-$DEFAULT_LOG_LEVEL}
+User=ats-exporter
+Group=ats-exporter
+EnvironmentFile=-/etc/ats-exporter/ats-exporter.env
+ExecStart=/usr/local/bin/ats-exporter \
+    --web.listen-address=${LISTEN_ADDRESS} \
+    --web.telemetry-path=${METRICS_PATH} \
+    --ats.method=${ATS_METHOD} \
+    --ats.url=${ATS_URL} \
+    --ats.traffic_ctl.path=${TRAFFIC_CTL_PATH} \
+    --ats.timeout=${ATS_TIMEOUT} \
+    --log.level=${LOG_LEVEL}
 Restart=on-failure
 RestartSec=5s
+LimitNOFILE=65536
 
 [Install]
 WantedBy=multi-user.target
-EOF
+SYSTEMD_EOF
 
     systemctl daemon-reload
     log_info "Systemd service created at ${service_file}"
 }
 
 enable_service() {
-    log_info "Enabling ${SERVICE_NAME} service..."
-    systemctl enable "${SERVICE_NAME}"
+    log_step "Enabling ${SERVICE_NAME} service..."
+    systemctl enable "${SERVICE_NAME}" >/dev/null 2>&1
 }
 
 start_service() {
-    log_info "Starting ${SERVICE_NAME} service..."
+    log_step "Starting ${SERVICE_NAME} service..."
     systemctl start "${SERVICE_NAME}"
     
     sleep 2
@@ -179,14 +234,59 @@ start_service() {
     fi
 }
 
+stop_service() {
+    if systemctl is-active --quiet "${SERVICE_NAME}" 2>/dev/null; then
+        log_step "Stopping ${SERVICE_NAME} service..."
+        systemctl stop "${SERVICE_NAME}"
+    fi
+}
+
+disable_service() {
+    if systemctl is-enabled --quiet "${SERVICE_NAME}" 2>/dev/null; then
+        log_step "Disabling ${SERVICE_NAME} service..."
+        systemctl disable "${SERVICE_NAME}" >/dev/null 2>&1
+    fi
+}
+
+remove_service_file() {
+    local service_file="/etc/systemd/system/${SERVICE_NAME}.service"
+    if [ -f "$service_file" ]; then
+        log_step "Removing systemd service file..."
+        rm -f "$service_file"
+        systemctl daemon-reload
+    fi
+}
+
+remove_user() {
+    if id -u "${SERVICE_USER}" >/dev/null 2>&1; then
+        log_step "Removing user ${SERVICE_USER}..."
+        userdel "${SERVICE_USER}" 2>/dev/null || true
+    fi
+}
+
+remove_binary() {
+    if [ -f "${INSTALL_DIR}/${BINARY_NAME}" ]; then
+        log_step "Removing binary..."
+        rm -f "${INSTALL_DIR}/${BINARY_NAME}"
+    fi
+}
+
+remove_config_dir() {
+    if [ -d "${CONFIG_DIR}" ]; then
+        log_step "Removing config directory..."
+        rm -rf "${CONFIG_DIR}"
+    fi
+}
+
 show_status() {
     echo ""
     log_info "Installation complete!"
     echo ""
-    echo "Binary: ${INSTALL_DIR}/${BINARY_NAME}"
-    echo "Service: ${SERVICE_NAME}"
+    echo "Binary:      ${INSTALL_DIR}/${BINARY_NAME}"
+    echo "Config:      ${CONFIG_DIR}/${BINARY_NAME}.env"
+    echo "Service:     ${SERVICE_NAME}"
     echo ""
-    echo "Configuration (via environment variables or service file):"
+    echo "Configuration (edit ${CONFIG_DIR}/${BINARY_NAME}.env or pass flags):"
     echo "  LISTEN_ADDRESS: ${LISTEN_ADDRESS:-$DEFAULT_LISTEN_ADDRESS}"
     echo "  METRICS_PATH:   ${METRICS_PATH:-$DEFAULT_METRICS_PATH}"
     echo "  ATS_URL:        ${ATS_URL:-$DEFAULT_ATS_URL}"
@@ -194,33 +294,178 @@ show_status() {
     echo "  LOG_LEVEL:      ${LOG_LEVEL:-$DEFAULT_LOG_LEVEL}"
     echo ""
     echo "Useful commands:"
-    echo "  sudo systemctl status ${SERVICE_NAME}   # Check service status"
-    echo "  sudo systemctl restart ${SERVICE_NAME}  # Restart service"
-    echo "  sudo journalctl -u ${SERVICE_NAME} -f    # View logs"
+    echo "  sudo systemctl status ${SERVICE_NAME}      # Check service status"
+    echo "  sudo systemctl restart ${SERVICE_NAME}     # Restart service"
+    echo "  sudo journalctl -u ${SERVICE_NAME} -f       # View logs"
+    echo "  sudo vi ${CONFIG_DIR}/${BINARY_NAME}.env    # Edit config"
+    echo ""
+}
+
+do_install() {
+    local version="$1"
+    local os=$(detect_os)
+    local arch=$(detect_arch)
+    
+    if check_installed; then
+        log_warn "${BINARY_NAME} is already installed (version: $(get_installed_version))"
+        if [ -t 0 ]; then
+            read -p "Do you want to upgrade? [y/N] " -n 1 -r
+            echo
+            if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+                log_info "Installation cancelled"
+                exit 0
+            fi
+        else
+            log_error "Non-interactive shell detected and ${BINARY_NAME} is already installed. Aborting upgrade to avoid unintended changes. Re-run this script from an interactive shell to confirm the upgrade."
+            exit 1
+        fi
+        stop_service
+    fi
+    
+    log_info "Installing ${BINARY_NAME} ${version}..."
+    
+    download_binary "$version" "$os" "$arch"
+    create_user
+    create_config_dir
+    create_env_file
+    create_systemd_service
+    enable_service
+    start_service
+    show_status
+}
+
+do_upgrade() {
+    local version="$1"
+    local os=$(detect_os)
+    local arch=$(detect_arch)
+    
+    if ! check_installed; then
+        log_error "${BINARY_NAME} is not installed. Use 'install' command first."
+        exit 1
+    fi
+    
+    local current_version=$(get_installed_version)
+    log_info "Current version: ${current_version}"
+    log_info "Upgrading to version: ${version}"
+    
+    stop_service
+    download_binary "$version" "$os" "$arch"
+    
+    # Ensure runtime environment and service unit are present/up to date
+    create_user
+    create_config_dir
+    create_env_file
+    create_systemd_service
+    enable_service
+    
+    start_service
+    show_status
+    
+    log_info "Upgrade complete!"
+}
+
+do_uninstall() {
+    if ! check_installed; then
+        log_warn "${BINARY_NAME} is not installed"
+        exit 0
+    fi
+    
+    log_info "Uninstalling ${BINARY_NAME}..."
+    
+    stop_service
+    disable_service
+    remove_service_file
+    remove_binary
+    
+    read -p "Remove configuration directory ${CONFIG_DIR}? [y/N] " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        remove_config_dir
+    fi
+    
+    read -p "Remove user '${SERVICE_USER}'? [y/N] " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        remove_user
+    fi
+    
+    log_info "Uninstall complete!"
+}
+
+do_status() {
+    echo ""
+    echo "=== ${BINARY_NAME} Status ==="
+    echo ""
+    
+    if check_installed; then
+        echo "Installed:    Yes"
+        echo "Version:      $(get_installed_version)"
+        echo "Binary:       ${INSTALL_DIR}/${BINARY_NAME}"
+        echo "Config:       ${CONFIG_DIR}/${BINARY_NAME}.env"
+        echo ""
+        
+        if systemctl is-active --quiet "${SERVICE_NAME}" 2>/dev/null; then
+            echo "Service:      Running"
+            echo "PID:          $(systemctl show --property MainPID --value ${SERVICE_NAME})"
+        elif systemctl is-enabled --quiet "${SERVICE_NAME}" 2>/dev/null; then
+            echo "Service:      Stopped (enabled)"
+        else
+            echo "Service:      Not configured"
+        fi
+    else
+        echo "Installed:    No"
+    fi
     echo ""
 }
 
 usage() {
-    echo "Usage: $0 [OPTIONS]"
+    echo "Usage: $0 <command> [OPTIONS]"
     echo ""
-    echo "Options:"
-    echo "  --listen-address ADDRESS   Listen address (default: ${DEFAULT_LISTEN_ADDRESS})"
-    echo "  --metrics-path PATH        Metrics path (default: ${DEFAULT_METRICS_PATH})"
-    echo "  --ats-url URL              ATS stats URL (default: ${DEFAULT_ATS_URL})"
-    echo "  --ats-timeout TIMEOUT       ATS timeout (default: ${DEFAULT_ATS_TIMEOUT})"
-    echo "  --log-level LEVEL          Log level (default: ${DEFAULT_LOG_LEVEL})"
-    echo "  --version VERSION          Version to install (default: latest)"
-    echo "  --help                     Show this help message"
+    echo "Commands:"
+    echo "  install     Install ${BINARY_NAME} (default command)"
+    echo "  upgrade     Upgrade to a new version"
+    echo "  uninstall   Remove ${BINARY_NAME}"
+    echo "  status      Show installation status"
+    echo ""
+    echo "Options for install/upgrade:"
+    echo "  --listen-address ADDR    Listen address (default: ${DEFAULT_LISTEN_ADDRESS})"
+    echo "  --metrics-path PATH      Metrics path (default: ${DEFAULT_METRICS_PATH})"
+    echo "  --ats-method METHOD      Method to fetch metrics: http or traffic_ctl (default: ${DEFAULT_ATS_METHOD})"
+    echo "  --ats-url URL            ATS stats URL, used when method=http (default: ${DEFAULT_ATS_URL})"
+    echo "  --traffic-ctl-path PATH  Path to traffic_ctl binary (default: ${DEFAULT_TRAFFIC_CTL_PATH})"
+    echo "  --ats-timeout TIMEOUT    ATS timeout (default: ${DEFAULT_ATS_TIMEOUT})"
+    echo "  --log-level LEVEL        Log level (default: ${DEFAULT_LOG_LEVEL})"
+    echo "  --version VERSION        Version to install (default: latest)"
     echo ""
     echo "Environment variables:"
-    echo "  LISTEN_ADDRESS, METRICS_PATH, ATS_URL, ATS_TIMEOUT, LOG_LEVEL"
+    echo "  LISTEN_ADDRESS, METRICS_PATH, ATS_METHOD, ATS_URL, TRAFFIC_CTL_PATH, ATS_TIMEOUT, LOG_LEVEL"
+    echo ""
+    echo "Examples:"
+    echo "  # Install latest version"
+    echo "  curl -sSLo install.sh https://raw.githubusercontent.com/${REPO}/main/install.sh"
+    echo "  chmod +x install.sh && sudo ./install.sh install"
+    echo ""
+    echo "  # Install specific version"
+    echo "  sudo ./install.sh install --version v1.0.0"
+    echo ""
+    echo "  # Install with HTTP method"
+    echo "  sudo ./install.sh install --ats-method http --ats-url http://localhost:80/_stats"
+    echo ""
+    echo "  # Install with traffic_ctl method (default)"
+    echo "  sudo ./install.sh install --ats-method traffic_ctl"
+    echo ""
+    echo "  # Upgrade to latest"
+    echo "  sudo ./install.sh upgrade"
+    echo ""
+    echo "  # Uninstall"
+    echo "  sudo ./install.sh uninstall"
+    echo ""
 }
 
-main() {
-    local version=""
-    local os=$(detect_os)
-    local arch=$(detect_arch)
-
+parse_args() {
+    COMMAND="${1:-install}"
+    shift || true
+    
     while [[ $# -gt 0 ]]; do
         case $1 in
             --listen-address)
@@ -231,8 +476,16 @@ main() {
                 METRICS_PATH="$2"
                 shift 2
                 ;;
+            --ats-method)
+                ATS_METHOD="$2"
+                shift 2
+                ;;
             --ats-url)
                 ATS_URL="$2"
+                shift 2
+                ;;
+            --traffic-ctl-path)
+                TRAFFIC_CTL_PATH="$2"
                 shift 2
                 ;;
             --ats-timeout)
@@ -244,10 +497,10 @@ main() {
                 shift 2
                 ;;
             --version)
-                version="$2"
+                VERSION="$2"
                 shift 2
                 ;;
-            --help)
+            -h|--help)
                 usage
                 exit 0
                 ;;
@@ -258,22 +511,43 @@ main() {
                 ;;
         esac
     done
+}
 
-    check_root
-
-    if [ -z "$version" ]; then
-        version=$(get_latest_version)
-    fi
-
-    log_info "Installing ${BINARY_NAME} ${version}..."
-
-    download_binary "$version" "$os" "$arch"
-    create_user
-    create_config_dir
-    create_systemd_service
-    enable_service
-    start_service
-    show_status
+main() {
+    parse_args "$@"
+    
+    case "$COMMAND" in
+        install)
+            check_root
+            if [ -z "$VERSION" ]; then
+                VERSION=$(get_latest_version)
+            fi
+            do_install "$VERSION"
+            ;;
+        upgrade)
+            check_root
+            if [ -z "$VERSION" ]; then
+                VERSION=$(get_latest_version)
+            fi
+            do_upgrade "$VERSION"
+            ;;
+        uninstall|remove)
+            check_root
+            do_uninstall
+            ;;
+        status)
+            do_status
+            ;;
+        help|--help|-h)
+            usage
+            exit 0
+            ;;
+        *)
+            log_error "Unknown command: $COMMAND"
+            usage
+            exit 1
+            ;;
+    esac
 }
 
 main "$@"

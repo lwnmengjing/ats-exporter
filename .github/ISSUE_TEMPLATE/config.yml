@@ -1,0 +1,13 @@
+name: New Issue
+description: Create a new issue
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please choose the appropriate issue template:
+        
+        - **Bug Report**: For reporting bugs or issues
+        - **Feature Request**: For suggesting new features
+        - **Question**: For asking questions
+        
+        If your issue doesn't fit these templates, feel free to delete this and write your own.
