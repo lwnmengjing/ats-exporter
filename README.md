@@ -1,11 +1,17 @@
 # ATS Exporter
 
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Go Report](https://goreportcard.com/badge/github.com/lwnmengjing/ats-exporter)](https://goreportcard.com/report/github.com/lwnmengjing/ats-exporter)
+[![Go Version](https://img.shields.io/badge/Go-1.24+-00ADD8.svg)](https://go.dev/dl/)
+[![Release](https://img.shields.io/github/v/release/lwnmengjing/ats-exporter?include_prereleases)](https://github.com/lwnmengjing/ats-exporter/releases)
+[![CI](https://github.com/lwnmengjing/ats-exporter/workflows/CI/badge.svg)](https://github.com/lwnmengjing/ats-exporter/actions)
+
 A Prometheus exporter for Apache Traffic Server metrics.
 
 ## Features
 
 - Exports comprehensive ATS metrics to Prometheus format
-- Modern Go 1.25+ implementation
+- Modern Go 1.24+ implementation
 - Configurable via command-line flags
 - Docker support
 - Graceful shutdown handling
